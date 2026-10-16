@@ -43,6 +43,9 @@ Embedding models (--model):
 
 Writes data/experiments/<model>/coords_<base>_<erasure>.npz, erasure_scores.csv and
 erasure_comparison.html. Embeddings come from embedder.py's cache after the first run.
+
+Run on 2026-10-15 with the 38-category taxonomy; taxonomy.TRADITIONS has since become
+33 + Other (see taxonomy_audit.py), and a re-run uses that.
 """
 
 import argparse

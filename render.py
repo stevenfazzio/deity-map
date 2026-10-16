@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import to_hex, to_rgb
 
+from category_labels import colormap_traditions
 from common import ROOT, write_bytes_atomic
 from embed import load_corpus
 from pageviews import PAGEVIEWS_PARQUET
@@ -32,7 +33,6 @@ from taxonomy import (
     DOMAIN_LABELS,
     GENDER_LABELS,
     KIND_LABELS,
-    resolve_traditions,
     upper_first,
 )
 from variants import VARIANTS, MapVariant, variant_arg
@@ -72,7 +72,7 @@ CUSTOM_CSS = """
 .title-link:hover { color: #111827; border-bottom-color: #111827; }
 /* Articles without a thumbnail get no image box at all. */
 .card-img[src=""] { display: none; }
-/* DataMapPlot's legend has no height limit, so Tradition's 38 entries ran the full
+/* DataMapPlot's legend has no height limit, so Tradition's 34 entries ran the full
    height of a laptop screen and covered the labels on the map's east side. */
 .color-legend-container { max-height: 55vh; overflow-y: auto; }
 .legend-item { padding: 2px 4px; }
@@ -176,7 +176,7 @@ def categorical_colormap(field: str, description: str, values: pd.Series):
         # An explicit mapping, so the hovercard can use exactly the map's colours.
         "color_mapping": mapping,
         # DataMapPlot hides the legend above 20 categories unless asked; Tradition has
-        # 38 and Main domain 23. It scrolls past 500 px rather than growing.
+        # 34 and Main domain 23. It scrolls past 500 px rather than growing.
         "show_legend": True,
     }
     return values.to_numpy(), meta, mapping
@@ -314,15 +314,16 @@ def main():
     print(f"render ({variant.name}): {len(df)} articles")
 
     kind_label = df.kind.map(KIND_LABELS)
-    tradition_label, tradition_category, region_label = resolve_traditions(df)
+    tradition_label, tradition_category, region_label = colormap_traditions(df)
     domain_label = df.primary_domain.map(DOMAIN_LABELS)
     gender_label = df.gender.map(GENDER_LABELS)
     summary = df.summary.fillna("").str.strip()
     unterminated = summary.ne("") & ~summary.str.endswith((".", "?", "!"))
     summary[unterminated] = summary[unterminated] + "."
 
-    # Colormap values collapse rare free-text "other" answers into one "Other"
-    # category; the hovercard and search keep the specific text.
+    # Wikipedia's categories decide the colour (category_labels.colormap_traditions);
+    # traditions without one of their own share "Other", while the hovercard and search
+    # keep the specific name.
     tradition_values, tradition_meta, tradition_colors = categorical_colormap(
         "tradition", "Tradition", tradition_category
     )

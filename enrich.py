@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import random
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from enum import StrEnum
@@ -301,6 +302,16 @@ out-of-scope article, say what it is about instead.
 Leave each *_other field as an empty string unless its field is other."""
 
 
+# 160 of 11,623 summaries came back ending in residue from the JSON around them: "}",
+# '"}', "</br>" or a mix ("”}</br>"). The prompt forbids quotation marks, so a quote
+# before the brace is residue too.
+SUMMARY_RESIDUE = re.compile(r'(?:\s|["”»]?\}|</?[a-z]+>|_placeholder_ignore)+$')
+
+
+def clean_summary(text: str) -> str:
+    return SUMMARY_RESIDUE.sub("", text)
+
+
 def user_message(row) -> str:
     lead = (row.lead or "").strip() or "(empty)"
     return (
@@ -412,6 +423,7 @@ def parse_message(pageid: int, msg, source: str) -> tuple[dict | None, str | Non
     # The prompt caps these at two and forbids repeating the primary; enforce it.
     secondary = [d for d in fields["secondary_domains"] if d != fields["primary_domain"]]
     fields["secondary_domains"] = list(dict.fromkeys(secondary))[:2]
+    fields["summary"] = clean_summary(fields["summary"])
     return {**base, "status": "ok", **fields}, None
 
 

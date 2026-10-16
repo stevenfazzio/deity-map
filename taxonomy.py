@@ -1,7 +1,9 @@
 """Display labels for the enrichment enums, and the tradition categories built from them.
 
-Shared by embed.py (the archetype map erases tradition, so it needs the categories)
-and render.py (colormaps and hovercards).
+Shared by embed.py (the archetype map erases tradition, so it needs the categories),
+category_labels.py (which maps Wikipedia's categories to the same traditions) and
+render.py (colormaps and hovercards). taxonomy_audit.py checks TRADITIONS against the
+rule that defines it.
 """
 
 import numpy as np
@@ -82,8 +84,7 @@ REGION_OF = {
     "other": "Other",
 }
 # Free-text answers for tradition "other", normalised: (pattern, name, region). The
-# enrichment enum had no slot for these, but several recur often enough (Jain 29,
-# Meitei 19, Ainu 11 of 4,551) to deserve their own colour.
+# enrichment enum had no slot for these; TRADITIONS decides which get a colour.
 OTHER_TRADITIONS = [
     (r"\bjain", "Jain", "South Asian & Buddhist"),
     (r"meitei|sanamahi", "Meitei (Sanamahism)", "South Asian & Buddhist"),
@@ -96,10 +97,61 @@ OTHER_TRADITIONS = [
     (r"kirat|limbu", "Kirati", "South Asian & Buddhist"),
     (r"\bsikh", "Sikh", "South Asian & Buddhist"),
     (r"kushite|nubian|meroitic", "Kushite", "Africa & diaspora"),
+    (r"\bromani\b|\bromany\b", "Romani", "Europe & northern Asia"),
 ]
-# A normalised free-text tradition this common gets its own colormap category;
-# rarer ones are plotted as "Other" but keep their name on the hovercard.
-MIN_PROMOTED = 5
+# Every tradition either rater can name, with its region: enrich.py's enum less
+# "other", then the names normalised from its free text.
+TRADITION_REGIONS = {
+    TRADITION_LABELS[k]: REGION_OF[k] for k in TRADITION_LABELS if k != "other"
+} | {name: region for _, name, region in OTHER_TRADITIONS}
+
+# The traditions with a colour, and a class in the archetype map's eraser, of their
+# own. A tradition is on this list when
+#   1. Wikipedia files its gods in a deity category of their own under "Deities by
+#      continent" or "Deities by religion" (the rest of a region, "Other European", is
+#      exempt: no single category can hold a residual), and
+#   2. Wikipedia's categories put at least MIN_TRADITION_SIZE of the map's articles in it.
+# The floor sits in a gap in the size distribution, so nearby floors pick the same
+# list; taxonomy_audit.py prints the gap, and fails if the list and the rule disagree.
+# Every other tradition is "Other" on the colormap and in the eraser, but keeps its
+# name on the hovercard and its region on the region colormap.
+MIN_TRADITION_SIZE = 15
+RESIDUAL_TRADITIONS = {"Other European"}
+TRADITIONS = [
+    "Greek",
+    "Roman & Italic",
+    "Egyptian",
+    "Mesopotamian",
+    "Levantine",
+    "Anatolian",
+    "Iranian",
+    "Pre-Islamic Arabian",
+    "Hindu",
+    "Buddhist",
+    "Jain",
+    "Meitei (Sanamahism)",
+    "Chinese",
+    "Japanese",
+    "Ainu",
+    "Korean",
+    "Southeast Asian",
+    "Norse & Germanic",
+    "Celtic",
+    "Slavic",
+    "Baltic",
+    "Finnic & Uralic",
+    "Other European",
+    "Turkic & Mongolic",
+    "Mesoamerican",
+    "South American",
+    "North American",
+    "Oceanian",
+    "Aboriginal Australian",
+    "African",
+    "African diaspora",
+    "Abrahamic",
+    "Modern movements",
+]
 DOMAIN_LABELS = {
     "sky_weather": "Sky & weather",
     "sun": "Sun",
@@ -158,13 +210,15 @@ def resolve_traditions(df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Serie
         hit = other & free.str.contains(pattern, regex=True)
         label[hit] = name
         region[hit] = where
-    counts = label[other].value_counts()
-    promoted = set(counts[counts >= MIN_PROMOTED].index)
-    category = label.where(~other | label.isin(promoted), "Other")
-    return label, category, region
+    return label, label.map(category_of), region
+
+
+def category_of(tradition: str) -> str:
+    """A tradition's colormap category: itself if it has a colour of its own, else Other."""
+    return tradition if tradition in TRADITIONS else "Other"
 
 
 def tradition_codes(df: pd.DataFrame) -> tuple[np.ndarray, int]:
-    """Integer codes for the tradition colormap's categories (38 on the 2026-10 corpus)."""
+    """Integer codes for the tradition colormap's categories: TRADITIONS and Other."""
     cat = pd.Categorical(resolve_traditions(df)[1])
     return cat.codes.astype(np.int64), len(cat.categories)

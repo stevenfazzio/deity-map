@@ -16,6 +16,7 @@ the FINEST layer (Toponymy's in-memory order, which DataMapPlot also expects).
 """
 
 import argparse
+import hashlib
 import json
 
 import numpy as np
@@ -48,14 +49,26 @@ def load_embeddings(variant: MapVariant, corpus: pd.DataFrame) -> np.ndarray:
 
 def get_coords(variant: MapVariant, pageids: np.ndarray, vectors: np.ndarray) -> np.ndarray:
     params_key = json.dumps(UMAP_PARAMS, sort_keys=True)
+    # The vectors too: a new eraser changes them while the pageids and params stay put.
+    vectors_key = hashlib.sha256(np.ascontiguousarray(vectors).tobytes()).hexdigest()
     if variant.coords.exists():
         cached = np.load(variant.coords)
-        if list(cached["pageids"]) == list(pageids) and str(cached["params"]) == params_key:
+        if (
+            list(cached["pageids"]) == list(pageids)
+            and str(cached["params"]) == params_key
+            and str(cached.get("vectors_sha256", "")) == vectors_key
+        ):
             return cached["coords"]
     # random_state forces n_jobs=1 (UMAP warns once); a fixed layout is worth the wait.
     print(f"running UMAP {UMAP_PARAMS}")
     coords = umap.UMAP(**UMAP_PARAMS).fit_transform(vectors).astype(np.float32)
-    write_npz_atomic(variant.coords, pageids=pageids, coords=coords, params=params_key)
+    write_npz_atomic(
+        variant.coords,
+        pageids=pageids,
+        coords=coords,
+        params=params_key,
+        vectors_sha256=vectors_key,
+    )
     return coords
 
 

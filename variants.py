@@ -11,6 +11,12 @@ archetype recipe gave the best domain structure of everything tried: 2-d domain 
 down to 0.20 (chance 0.06). Erasing tradition without the instruction left far less
 structure, and with the 0.6B model it left a featureless ball.
 
+Since 2026-10-16 the eraser is fit on the traditions Wikipedia's categories give
+(category_labels.py) rather than on enrich.py's, which became the check;
+experiments/erase_by_categories.py found the two give the same map. The published role
+map scores 0.56 on domain and 0.55 on same-domain cross-tradition neighbours, with
+tradition at 0.20.
+
 Each stage takes `--variant` and reads and writes that variant's files.
 """
 
