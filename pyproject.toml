@@ -1,0 +1,41 @@
+[project]
+name = "deity-map"
+version = "0.1.0"
+description = "An interactive map of the gods and goddesses with English Wikipedia articles"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=1.14.0",
+    "concept-erasure>=0.2.4",
+    "datamapplot>=0.7.3",
+    # 0.4.0 shipped 2026-10-15; the palette code here was written against 0.3.x.
+    "glasbey>=0.3.0,<0.4",
+    "numpy>=2.0",
+    # datamapplot's pylabeladjust pins pandas<3; without this bound uv silently
+    # resolves an ancient datamapplot instead of reporting the conflict.
+    "pandas>=2.2,<3",
+    "pyarrow>=15",
+    "requests>=2.31",
+    "sentence-transformers>=5.0",
+    "toponymy>=0.5.4",
+    "tqdm>=4.66",
+    "umap-learn>=0.5.12",
+]
+
+[dependency-groups]
+dev = [
+    "pillow>=10",
+    "playwright>=1.50",
+    "plotly>=6",
+    "ruff>=0.6",
+]
+
+# Pinned past PyPI's 0.7.3 (2026-05-31) for tap-to-inspect (#206): render.py sets
+# on_click, and without #206 a phone tap opens Wikipedia before the hover card can
+# show. Same rev as living-people-map, which reviewed it. Main still self-reports
+# "0.7.3", so trust this rev rather than datamapplot.__version__. Drop the pin once
+# a release includes #206.
+[tool.uv.sources]
+datamapplot = { git = "https://github.com/TutteInstitute/datamapplot", rev = "5cf47aa5ecc2023dde89226fff93f67513341cf5" }
+
+[tool.ruff]
+line-length = 100

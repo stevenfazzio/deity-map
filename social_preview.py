@@ -1,0 +1,115 @@
+"""Screenshot the rendered map -> docs/social-preview.png (1200 x 630 link card).
+
+The card is the interactive map itself rather than a separate static plot, so a
+shared link previews what the reader will actually get. The map is WebGL, so this
+drives the installed Chrome through Playwright (no bundled browser is downloaded).
+
+    uv run render.py --variant pantheon
+    uv run social_preview.py --variant pantheon
+"""
+
+import argparse
+import functools
+import http.server
+import io
+import threading
+from pathlib import Path
+
+from PIL import Image
+from playwright.sync_api import sync_playwright
+
+from common import write_bytes_atomic
+from render import DOCS
+from variants import VARIANTS, variant_arg
+
+OG_SIZE = (1200, 630)
+SCALE = 2  # capture at 2x and downsample, so labels and points stay crisp
+SETTLE_MS = 6000
+
+# Controls that do nothing in a still image.
+HIDE_CONTROLS = """
+for (const id of ['search-container', 'colormap-selector-container']) {
+  const el = document.getElementById(id);
+  if (el) (el.closest('.container-box') || el).style.display = 'none';
+}
+"""
+
+
+# Link previews print og:title under the image, so the card can spend the space
+# on the map instead.
+HIDE_TITLE = """
+const t = document.getElementById('title-container');
+if (t) (t.closest('.container-box') || t).style.display = 'none';
+"""
+
+
+class QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    # Wheel ticks at the centre after the nudge: the card is wider than the map's
+    # default framing, which otherwise leaves the cloud small in the middle.
+    # Defaults inherited from sep-map and checked by eye on both maps (2026-10-15): every
+    # label crisp, none mid-fade, none clipped at the frame edge.
+    parser.add_argument("--zoom", type=int, default=3)
+    parser.add_argument("--pan", type=int, default=-20, help="drag the map down N px")
+    parser.add_argument("--title", action="store_true", help="keep the title panel")
+    parser.add_argument("--out", type=Path, default=None, help="default: the variant's card")
+    variant_arg(parser)
+    args = parser.parse_args()
+
+    variant = VARIANTS[args.variant]
+    out = args.out or DOCS / variant.social_preview
+    handler = functools.partial(QuietHandler, directory=str(DOCS))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_port}/{variant.html}"
+    w, h = OG_SIZE
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(channel="chrome")
+            page = browser.new_page(viewport={"width": w, "height": h}, device_scale_factor=SCALE)
+            page.goto(url, wait_until="load", timeout=120_000)
+            page.wait_for_load_state("networkidle", timeout=45_000)
+            page.wait_for_timeout(SETTLE_MS)
+            # A small drag, as in stevenfazzio.github.io's thumbnail script, which uses
+            # it because older DataMapPlot builds didn't paint labels until the view
+            # was touched. datamapplot 0.7.3 paints them on load, so the drag isn't
+            # needed for that; it stays because the --zoom/--pan defaults were chosen
+            # with it in place (it shifts the view by 15 x 8 px).
+            page.mouse.move(w / 2, h / 2)
+            page.mouse.down()
+            page.mouse.move(w / 2 + 15, h / 2 + 8, steps=6)
+            page.mouse.up()
+            page.wait_for_timeout(3000)
+            for _ in range(args.zoom):
+                page.mouse.wheel(0, -50)
+                page.wait_for_timeout(150)
+            if args.pan:
+                page.mouse.move(w / 2, h / 2)
+                page.mouse.down()
+                page.mouse.move(w / 2, h / 2 + args.pan, steps=8)
+                page.mouse.up()
+            page.mouse.move(0, 0)  # park the cursor off the points: no hover card
+            page.evaluate(HIDE_CONTROLS)
+            if not args.title:
+                page.evaluate(HIDE_TITLE)
+            page.wait_for_timeout(4000)
+            shot = page.screenshot()
+            browser.close()
+    finally:
+        server.shutdown()
+
+    with Image.open(io.BytesIO(shot)) as im:
+        card = im.convert("RGB").resize(OG_SIZE, Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    card.save(buf, format="PNG", optimize=True)
+    write_bytes_atomic(buf.getvalue(), out)
+    print(f"wrote {out} {card.size} ({out.stat().st_size / 1e3:.0f} KB)")
+
+
+if __name__ == "__main__":
+    main()
