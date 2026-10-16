@@ -1,8 +1,8 @@
 """Embed each in-scope article's name + lead section, for one map variant.
 
 The map's corpus is defined here, by load_corpus(): the articles enrich.py classified
-as one of the in-scope kinds. Every later stage reads it through this function and
-checks its pageids against the embeddings file.
+as one of the in-scope kinds, less the hand exclusions in exclusions.py. Every later
+stage reads it through this function and checks its pageids against the embeddings file.
 
 Both variants embed the same text with Qwen3-Embedding-8B (via OpenRouter, ~$0.01).
 The archetype variant adds an instruction asking for the deity's roles, then erases
@@ -30,6 +30,7 @@ from concept_erasure import LeaceEraser
 from common import ARTICLES_PARQUET, write_bytes_atomic, write_npz_atomic
 from embedder import OpenRouterEmbedder
 from enrich import ENRICHMENT_PARQUET, IN_SCOPE
+from exclusions import DUPLICATES, EXCLUDED
 from taxonomy import tradition_codes
 from variants import VARIANTS, MapVariant, variant_arg
 
@@ -44,7 +45,11 @@ def load_corpus() -> pd.DataFrame:
     enrichment = pd.read_parquet(ENRICHMENT_PARQUET)
     ok = enrichment[enrichment.status == "ok"]
     df = articles.merge(ok, on="pageid", how="inner", validate="1:1")
-    corpus = df[df.kind.isin(IN_SCOPE)].sort_values("pageid").reset_index(drop=True)
+    in_scope = df[df.kind.isin(IN_SCOPE)]
+    stale = (EXCLUDED | set(DUPLICATES.values())) - set(in_scope.title)
+    assert not stale, f"exclusions.py names titles that are not in scope: {stale}"
+    corpus = in_scope[~in_scope.title.isin(EXCLUDED)]
+    corpus = corpus.sort_values("pageid").reset_index(drop=True)
     corpus["name"] = corpus.title.map(display_name)
     return corpus
 
@@ -86,8 +91,8 @@ def main():
     refused = (enrichment.status == "refusal").sum()
     print(
         f"embed ({variant.name}): {len(articles)} articles → {len(corpus)} in scope "
-        f"({not_enriched} not yet enriched, {refused} refusals, "
-        f"the rest classified out of scope)"
+        f"({not_enriched} not yet enriched, {refused} refusals, {len(EXCLUDED)} excluded "
+        f"by hand, the rest classified out of scope)"
     )
     assert not_enriched == 0, "run enrich.py to completion first"
 

@@ -83,7 +83,7 @@ REGION_OF = {
 }
 # Free-text answers for tradition "other", normalised: (pattern, name, region). The
 # enrichment enum had no slot for these, but several recur often enough (Jain 29,
-# Meitei 19, Ainu 11 of 4,618) to deserve their own colour.
+# Meitei 19, Ainu 11 of 4,551) to deserve their own colour.
 OTHER_TRADITIONS = [
     (r"\bjain", "Jain", "South Asian & Buddhist"),
     (r"meitei|sanamahi", "Meitei (Sanamahism)", "South Asian & Buddhist"),

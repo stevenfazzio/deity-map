@@ -25,8 +25,13 @@ The candidate pool is generous on purpose, because neither obvious source is com
 - **Wikipedia's Category:Deities**, crawled three levels deep. It finds those, but
   also pulls in temples, festivals, artworks and fiction.
 
-Claude reads every candidate's lead section and decides whether it belongs; the maps
-show whatever passes that filter.
+Claude reads every candidate's lead section and decides whether it belongs. A hand
+review of the deified people and modern religions then removed 67 more, by rule rather
+than case by case (`exclusions.py`): things that are not divine at all (Sapa Inca is
+an office, the Flying Spaghetti Monster is satire), biographies whose lead never says
+the person was worshipped, people worshipped only by their own movement who are living
+or died after 2000, and people whose deity has its own article (Sugawara no Michizane,
+who is also Tenjin).
 
 ## How the role map removes culture
 
@@ -41,11 +46,11 @@ role map changes two things, both tested in `experiments/erase_tradition.py`:
    possible. Toponymy's keyphrases go through the same instruction and eraser, so the
    region names are computed in the same space.
 
-Measured on the 4,618 deities, with chance in brackets:
+Measured on the 4,551 deities, with chance in brackets:
 
 | | Neighbours sharing a tradition | Neighbours sharing a main domain | Cross-cultural neighbours sharing a domain |
 |---|---|---|---|
-| Pantheon map | 0.87 (0.06) | 0.22 (0.07) | 0.21 (0.07) |
+| Pantheon map | 0.87 (0.06) | 0.21 (0.06) | 0.20 (0.06) |
 | Role map | 0.20 | 0.51 | 0.53 |
 
 Erasure alone was not enough: without the instruction, the leads have too little role
@@ -69,9 +74,9 @@ far and keeps more of the remaining structure.
 
 `variants.py` holds everything that differs between the two maps. Regions are found
 on the same 2-d layout that is plotted, so every named region matches something
-visible on the map. Continent names Toponymy gets wrong are corrected by hand in
-`variants.py`: it names a region after its most central members, which can be the
-many minor figures around a few major gods.
+visible on the map. Continent names Toponymy gets wrong can be corrected by hand in
+`variants.py` (none need it at present): it names a region after its most central
+members, which can be the many minor figures around a few major gods.
 
 The enrichment model was chosen on a 59-article sample run through Opus, Sonnet and
 Haiku 5.5: Sonnet matched Opus on 57 of 59 scope decisions at half the price, while

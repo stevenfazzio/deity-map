@@ -89,20 +89,6 @@ VARIANTS = {
         corpus_description="English Wikipedia's articles on the world's deities",
         naming_note="",
         orientation=(-1, 1),
-        # Toponymy names a region after its most central members. This continent's
-        # are mostly Native American, African and Polynesian, but it also holds 421
-        # Norse, Slavic, Baltic, Finnic and Turkic deities, so Odin and Thor sat under
-        # "Indigenous Mythologies". Keyed by name, so a re-run of cluster.py that
-        # renames it fails loudly in render.py instead of silently dropping this.
-        coarsest_name_overrides={
-            "Indigenous Mythologies": "Northern and Indigenous Gods",
-            # The two Greek continents sit side by side, and their labels are too close
-            # for both to show at overview: this one's six-word name hid both, and a
-            # shorter one won the collision and labelled Zeus's side "Nymphs". One shared
-            # name reads right whichever label wins; the next layer down still says
-            # "Oceanids, Naiads, Titans and River-Gods".
-            "Oceanids, Naiads, Titans and River-Gods": "Greek Deities",
-        },
         other=("archetype", "See them by role →"),
     ),
     "archetype": MapVariant(
@@ -131,7 +117,7 @@ VARIANTS = {
             '"Storm and Thunder Gods" or "Psychopomps and Guides of the Dead"), not for a '
             "culture or pantheon. Name a culture only if one genuinely dominates the region."
         ),
-        orientation=(-1, 1),
+        orientation=(1, -1),
         other=("pantheon", "See them by pantheon →"),
     ),
 }
