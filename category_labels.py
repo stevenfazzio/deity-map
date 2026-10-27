@@ -1,4 +1,8 @@
-"""Tradition and domain labels from Wikipedia's categories: enrich.py's facets, from editors.
+"""Tradition, domain and kind labels from Wikipedia's categories: enrich.py's facets, from editors.
+
+Kind needs no table: Wikipedia files deified people under categories named "Deified …"
+(Deified Chinese women, Deified male monarchs), and decided_kinds takes those as the
+person-worshipped-as-divine label, with enrich.py's re-run filling in where they're silent.
 
 Two hand-written tables map a pattern over a category's name to a label in taxonomy.py's
 vocabulary: TRADITION_PATTERNS to its tradition names (TRADITION_REGIONS), DOMAIN_PATTERNS
@@ -15,10 +19,11 @@ says nothing about the article's own role.
 
     uv run category_labels.py
 
-Prints coverage and agreement with enrich.py's labels, and writes two files to audit
+Prints coverage and agreement with enrich.py's labels, and writes three files to audit
 the tables against: data/category_map.csv (every category that matched, with its
-labels and article count) and data/category_disagreements.csv (articles where the
-categories and enrich.py disagree, with the categories that decided it).
+labels and article count), data/category_disagreements.csv (articles where the
+categories and enrich.py disagree on tradition, with the categories that decided it)
+and data/kind_disagreements.csv (the same for who is a person worshipped as divine).
 """
 
 import re
@@ -30,10 +35,16 @@ import pandas as pd
 from categories import CATEGORIES_PARQUET, CATEGORY_PARENTS_PARQUET
 from common import DATA
 from embed import load_corpus
+from enrich import IN_SCOPE, RERUN_PARQUET
 from taxonomy import DOMAIN_LABELS, TRADITION_REGIONS, category_of, resolve_traditions
 
 CATEGORY_MAP_CSV = DATA / "category_map.csv"
 DISAGREEMENTS_CSV = DATA / "category_disagreements.csv"
+KIND_DISAGREEMENTS_CSV = DATA / "kind_disagreements.csv"
+PERSON = "deified_person"
+# Only categories named this way, not the whole tree under "Deified people": a level
+# down it leaks ("Taoist immortals" brings in Sun Wukong and Vajrapani).
+DEIFIED = "Deified "
 MAX_LEVELS = {"traditions": 2, "domains": 1}  # categories.py fetches 2
 # Biographical categories ("19th-century Japanese women") give a deified person's
 # nationality, not the tradition that worships them.
@@ -426,6 +437,73 @@ def colormap_traditions(df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Seri
     return label, pd.Series(category, index=df.index), region
 
 
+def deified_categories(pageids: pd.Series) -> pd.Series:
+    """Each article's own "Deified …" categories, joined; empty where it has none."""
+    cats = pd.read_parquet(CATEGORIES_PARQUET)
+    deified = cats[cats.category.str.startswith(DEIFIED)]
+    joined = deified.groupby("pageid").category.apply(lambda c: "; ".join(sorted(c)))
+    return pageids.map(joined).fillna("")
+
+
+def rerun_kinds(pageids: pd.Series) -> pd.Series:
+    """enrich.py's re-run kind per article; NaN where it was refused."""
+    rerun = pd.read_parquet(RERUN_PARQUET)
+    missing = set(pageids) - set(rerun.pageid)
+    assert not missing, f"{len(missing)} articles have no re-run: run enrich.py --rerun"
+    return pageids.map(rerun[rerun.status == "ok"].set_index("pageid").kind)
+
+
+def decided_kinds(df: pd.DataFrame) -> pd.Series:
+    """The map's kind per article, with Wikipedia's categories deciding who is a person.
+
+    An individual being filed under a "Deified …" category is a person worshipped as
+    divine. The categories say who is deified, never who isn't, so where they're silent
+    enrich.py's re-run under the current prompt decides that one question. Everything
+    else keeps the first run's kind: its god / minor divinity / group calls don't churn
+    with the re-run's, and scope stays the first run's to decide, so a re-run answer
+    outside it is ignored.
+    """
+    again = rerun_kinds(df.pageid)
+    usable = again.isin(IN_SCOPE)
+    kind = df.kind.copy()
+    kind[usable & (again == PERSON)] = PERSON
+    leaving = usable & (df.kind == PERSON) & (again != PERSON)
+    kind[leaving] = again[leaving]
+    kind[(deified_categories(df.pageid) != "") & (kind != "divine_group")] = PERSON
+    return kind
+
+
+def report_kinds(corpus: pd.DataFrame) -> None:
+    df = corpus[["pageid", "name", "kind"]].assign(
+        rerun=rerun_kinds(corpus.pageid),
+        decided=decided_kinds(corpus),
+        deified_from=deified_categories(corpus.pageid),
+    )
+    print(f"persons worshipped as divine, {len(df)} articles:")
+    print(
+        f"  first run {(df.kind == PERSON).sum()}, re-run {(df.rerun == PERSON).sum()}, "
+        f"decided {(df.decided == PERSON).sum()}"
+    )
+    filed = df[(df.deified_from != "") & (df.decided == PERSON)]
+    agree = filed.rerun == PERSON
+    print(
+        f"  {len(filed)} filed under a Deified category: the re-run agrees on "
+        f"{agree.mean():.3f} ({agree.sum()})"
+    )
+    print(
+        f"  {((df.deified_from == '') & (df.decided == PERSON)).sum()} more from the re-run alone"
+    )
+    print(
+        f"  re-run kind ignored: {df.rerun.isna().sum()} refused, "
+        f"{(df.rerun.notna() & ~df.rerun.isin(IN_SCOPE)).sum()} out of scope"
+    )
+    moved = pd.crosstab(df.kind, df.decided)
+    print(f"  first run (rows) → decided (columns):\n{moved.to_string()}")
+    dis = filed[~agree][["name", "rerun", "deified_from"]]
+    dis.sort_values("name").to_csv(KIND_DISAGREEMENTS_CSV, index=False)
+    print(f"wrote {KIND_DISAGREEMENTS_CSV} ({len(dis)} articles)")
+
+
 def check_vocabulary() -> None:
     unknown = {label for _, label in TRADITION_PATTERNS} - set(TRADITION_REGIONS)
     assert not unknown, f"TRADITION_PATTERNS uses names taxonomy.py doesn't have: {unknown}"
@@ -525,6 +603,7 @@ def main():
     s = structured_labels(corpus)
     df = report(corpus, s)
     write_reviews(corpus, df)
+    report_kinds(corpus)
 
 
 if __name__ == "__main__":

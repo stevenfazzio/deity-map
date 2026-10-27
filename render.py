@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import to_hex, to_rgb
 
-from category_labels import colormap_traditions
+from category_labels import colormap_traditions, decided_kinds
 from common import ROOT, write_bytes_atomic
 from embed import load_corpus
 from pageviews import PAGEVIEWS_PARQUET
@@ -313,7 +313,7 @@ def main():
     assert missing_views == 0, f"{missing_views} articles have no pageviews; run pageviews.py"
     print(f"render ({variant.name}): {len(df)} articles")
 
-    kind_label = df.kind.map(KIND_LABELS)
+    kind_label = decided_kinds(df).map(KIND_LABELS)
     tradition_label, tradition_category, region_label = colormap_traditions(df)
     domain_label = df.primary_domain.map(DOMAIN_LABELS)
     gender_label = df.gender.map(GENDER_LABELS)

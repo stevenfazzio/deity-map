@@ -13,9 +13,22 @@ Wikipedia articles, named at several zoom levels:
 
 Anything treated as divine by a real religious or mythological tradition, past or
 present: gods and goddesses (including monotheistic conceptions of God), minor
-divinities such as nymphs and household spirits, deified people such as Guan Yu, and
-named groups such as the Muses. Modern fiction (Lovecraft, comics, games), non-divine
-mythological figures, and articles about deity *types* ("Sun deity") are left out.
+divinities such as nymphs and household spirits, people worshipped as divine such as
+Guan Yu, and named groups such as the Muses. Modern fiction (Lovecraft, comics, games),
+non-divine mythological figures, and articles about deity *types* ("Sun deity") are
+left out.
+
+A person worshipped as divine is someone who lived, in history or in legend, whatever
+their tradition says about how they came to be divine: a man made a god, like Guan Yu,
+or a god born as a man, like Swaminarayan. Wikipedia's editors decide where they can.
+The 179 individual beings on the map that Wikipedia files under a "Deified …" category
+(Deified Chinese women, Deified male monarchs) all count, among them Jesus, Jesus in
+Christianity, Mazu, Shango and the Buddha. The categories say who is deified, never who
+isn't, so for the rest Claude re-read each lead under that rule (`enrich.py --rerun`)
+and decided the other 77, such as Heracles, Wong Tai Sin and the Jain tīrthaṅkaras.
+God the Son, Krishna and Rama stay gods. Where the categories speak, Claude agrees on
+82% (147 of 179); two thirds of the rest are Burmese nats and Chinese gods that the
+categories file as people but whose leads present a god.
 
 The candidate pool is generous on purpose, because neither obvious source is complete:
 
@@ -26,12 +39,12 @@ The candidate pool is generous on purpose, because neither obvious source is com
   also pulls in temples, festivals, artworks and fiction.
 
 Claude reads every candidate's lead section and decides whether it belongs. A hand
-review of the deified people and modern religions then removed 67 more, by rule rather
-than case by case (`exclusions.py`): things that are not divine at all (Sapa Inca is
-an office, the Flying Spaghetti Monster is satire), biographies whose lead never says
-the person was worshipped, people worshipped only by their own movement who are living
-or died after 2000, and people whose deity has its own article (Sugawara no Michizane,
-who is also Tenjin).
+review of the people worshipped as divine and of modern religions then removed 67
+more, by rule rather than case by case (`exclusions.py`): things that are not divine
+at all (Sapa Inca is an office, the Flying Spaghetti Monster is satire), biographies
+whose lead never says the person was worshipped, people worshipped only by their own
+movement who are living or died after 2000, and people whose deity has its own article
+(Sugawara no Michizane, who is also Tenjin).
 
 ## Traditions
 
@@ -110,7 +123,8 @@ not adopted.
 | Render | `render.py` | [DataMapPlot](https://github.com/TutteInstitute/datamapplot) builds `docs/index.html` and `docs/archetypes.html` |
 | Card | `social_preview.py` | Screenshots each rendered map in Chrome for its link-preview image |
 
-`category_labels.py` maps Wikipedia's categories to traditions and domains, and
+`category_labels.py` maps Wikipedia's categories to traditions and domains and decides
+who is a person worshipped as divine, and
 `taxonomy.py` holds the tradition list. `variants.py` holds everything that differs
 between the two maps. Regions are found
 on the same 2-d layout that is plotted, so every named region matches something
@@ -131,6 +145,7 @@ Requires [uv](https://docs.astral.sh/uv/), `ANTHROPIC_API_KEY` and
 uv run candidates.py
 uv run fetch.py
 uv run enrich.py --sample 60 --direct && uv run enrich.py
+uv run enrich.py --rerun  # the map's articles again, for who is a person
 uv run pageviews.py
 uv run categories.py
 for v in pantheon archetype; do

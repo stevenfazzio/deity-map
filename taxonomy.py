@@ -12,7 +12,9 @@ import pandas as pd
 KIND_LABELS = {
     "deity": "God or goddess",
     "minor_divinity": "Minor divinity",
-    "deified_person": "Deified person",
+    # Stored as deified_person, but shown without "deified", which says a person
+    # became divine; some traditions hold instead that a god was born human.
+    "deified_person": "Person worshipped as divine",
     "divine_group": "Divine group",
 }
 TRADITION_LABELS = {

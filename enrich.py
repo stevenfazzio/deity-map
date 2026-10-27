@@ -15,6 +15,13 @@ have an `_other` free-text escape hatch for the hovercard and search.
     # the same sample through another model, written to its own parquet for comparison
     uv run enrich.py --sample 60 --direct --model claude-haiku-5-5
 
+    # the map's articles again under the current prompt, written to their own parquet
+    uv run enrich.py --rerun
+
+The re-run exists for the person-worshipped-as-divine rule (2026-10-26), which came
+after the first run: category_labels.decided_kinds takes only its kind, so the other
+facets and the summaries stay as first labelled.
+
 Resumable: the batch id is checkpointed to disk right after submission, and a re-run
 polls that batch instead of submitting a new one. Refusals are recorded as terminal;
 errored or expired requests are left out so the next run retries them.
@@ -45,6 +52,8 @@ MODEL = "claude-sonnet-5-5"
 EFFORT = "medium"
 ENRICHMENT_PARQUET = DATA / "enrichment.parquet"
 PENDING_FILE = DATA / "enrich_pending.json"
+RERUN_PARQUET = DATA / "enrichment_rerun.parquet"
+RERUN_PENDING_FILE = DATA / "enrich_rerun_pending.json"
 DIRECT_MAX, DIRECT_WORKERS = 500, 8
 # Batch API rates per MTok (50% of list): input, output, cache read.
 BATCH_RATES = {
@@ -70,6 +79,8 @@ PROBES = [
     "Sun Wukong",
     "Allah",
     "Jesus",
+    "Jesus in Christianity",
+    "Swaminarayan",
     "Holy Spirit",
     "Cthulhu",
     "Waheguru",
@@ -212,13 +223,23 @@ of God (e.g. "God in Christianity", "Allah"), persons of the Trinity, and avatar
 forms and aspects that have their own article (e.g. a form of Parvati). Spirits that \
 are the principal objects of worship in their tradition count here: kami, loa, \
 orisha, vodun. Buddhas and bodhisattvas venerated as objects of devotion count here. \
-A figure whose divinity is central doctrine of a living religion is a deity, not a \
-deified person (Jesus in Christianity, Krishna, Rama).
+A being whose lead says it is a particular person who lived is a deified_person \
+instead (below).
 - minor_divinity: a divine or semi-divine being that its tradition ranks below the \
 gods: nymphs, demigods, daimones, divine attendants and messengers, local, \
 household and nature spirits that receive cult or offerings.
-- deified_person: a historical or legendary human who came to be worshipped as \
-divine after or during their life (e.g. Guan Yu, Imhotep, Antinous, deified emperors).
+- deified_person: a person who lived, in history or in legend, and is worshipped as \
+divine, when the lead says both. Either the article tells the person's life (Guan Yu, \
+Imhotep, Antinous, a deified emperor), or it is about a god that its lead identifies \
+as a particular person, as its main account rather than one theory among several \
+(Tenjin, the deified Sugawara no Michizane). Decide from the lead, not from theology: \
+it does not matter whether the tradition says the person became divine or was a god \
+born human, so a teacher or ruler whose followers hold them to be God incarnate or an \
+avatar belongs here (Swaminarayan, Haile Selassie). One figure can have an article of \
+each kind: the article on Jesus as a first-century preacher is deified_person, the \
+article on Jesus in Christianity is a deity. A god that its lead presents as a god is \
+a deity even if its myths give it a human birth (Krishna and Rama as avatars of \
+Vishnu).
 - divine_group: a named, specific collective of divinities treated together (e.g. \
 the Muses, the Æsir, the Seven Lucky Gods).
 - deity_concept: an article about a type, class or idea of deity rather than a \
@@ -234,7 +255,8 @@ as worshipped; when it does, use deity or minor_divinity.
 or novels, including modern fictional versions of traditional gods (e.g. Cthulhu, \
 Marvel's Thor, a Dungeons & Dragons god, a video game god).
 - not_a_being: anything else: temples, shrines, festivals, texts, artworks, images, \
-places, rituals, religious movements, people who were not deified, films, songs.
+places, rituals, religious movements, people who are not worshipped as divine, films, \
+songs.
 
 tradition
 The religious or cultural tradition the article primarily presents the being in. \
@@ -342,9 +364,9 @@ def build_request(row, model: str = MODEL) -> Request:
     )
 
 
-def load_done(model: str = MODEL) -> pd.DataFrame:
-    if enrichment_path(model).exists():
-        return pd.read_parquet(enrichment_path(model))
+def load_done(path) -> pd.DataFrame:
+    if path.exists():
+        return pd.read_parquet(path)
     return pd.DataFrame(columns=["pageid"])
 
 
@@ -369,7 +391,7 @@ def validation_sample(articles: pd.DataFrame, n: int) -> set[int]:
     return picked
 
 
-def submit(client, rows: list) -> dict:
+def submit(client, rows: list, pending_file) -> dict:
     batch = client.messages.batches.create(requests=[build_request(r) for r in rows])
     # Checkpoint before polling: a re-run resumes this batch rather than paying twice.
     pending = {
@@ -379,7 +401,7 @@ def submit(client, rows: list) -> dict:
         "effort": EFFORT,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
-    write_bytes_atomic(json.dumps(pending, indent=2).encode(), PENDING_FILE)
+    write_bytes_atomic(json.dumps(pending, indent=2).encode(), pending_file)
     print(f"submitted batch {batch.id} with {len(rows)} requests")
     return pending
 
@@ -506,13 +528,13 @@ def report(df: pd.DataFrame, articles: pd.DataFrame, model: str = MODEL) -> None
     )
 
 
-def save(done, rows: list, failures: dict, n_submitted: int, articles, model: str) -> None:
+def save(done, rows: list, failures: dict, n_submitted: int, articles, model: str, path) -> None:
     print(f"enrich: {n_submitted} submitted → {len(rows)} recorded ({len(failures)} to retry)")
     for pageid, why in failures.items():
         print(f"  RETRY {pageid}: {why}")
     new = pd.DataFrame(rows, columns=None if rows else ["pageid"])
     merged = pd.concat([done[~done.pageid.isin(new.pageid)], new], ignore_index=True)
-    write_parquet_safely(merged.sort_values("pageid"), enrichment_path(model))
+    write_parquet_safely(merged.sort_values("pageid"), path)
     report(merged, articles, model)
 
 
@@ -523,18 +545,30 @@ def main():
         "--direct", action="store_true", help="concurrent calls instead of a batch (small sets)"
     )
     parser.add_argument("--model", default=MODEL, choices=sorted(BATCH_RATES))
+    parser.add_argument(
+        "--rerun", action="store_true", help="the map's articles again, into RERUN_PARQUET"
+    )
     args = parser.parse_args()
     model = args.model
+    assert not (args.rerun and model != MODEL), "the re-run is for the map's model"
+    path = RERUN_PARQUET if args.rerun else enrichment_path(model)
+    pending_file = RERUN_PENDING_FILE if args.rerun else PENDING_FILE
 
     client = anthropic.Anthropic()
     articles = pd.read_parquet(ARTICLES_PARQUET)
-    done = load_done(model)
+    done = load_done(path)
 
-    if PENDING_FILE.exists():
-        pending = json.loads(PENDING_FILE.read_text())
+    if pending_file.exists():
+        pending = json.loads(pending_file.read_text())
         print(f"resuming batch {pending['batch_id']} ({len(pending['pageids'])} requests)")
     else:
-        todo = articles[~articles.pageid.isin(done.pageid)].sort_values("pageid")
+        pool = articles
+        if args.rerun:
+            # Imported here: embed imports this module.
+            from embed import load_corpus
+
+            pool = articles[articles.pageid.isin(load_corpus().pageid)]
+        todo = pool[~pool.pageid.isin(done.pageid)].sort_values("pageid")
         if args.sample is not None:
             # Fixed seed over the whole corpus, then drop what's done, so the
             # validation set is stable across re-runs.
@@ -546,15 +580,15 @@ def main():
         print(f"{len(done)} already enriched; submitting {len(todo)}")
         if args.direct:
             rows, failures = run_direct(client, list(todo.itertuples()), model)
-            save(done, rows, failures, len(todo), articles, model)
+            save(done, rows, failures, len(todo), articles, model, path)
             return
         assert model == MODEL, "batches are for the map's model; compare others with --direct"
-        pending = submit(client, list(todo.itertuples()))
+        pending = submit(client, list(todo.itertuples()), pending_file)
 
     wait(client, pending["batch_id"])
     rows, failures = collect(client, pending)
-    save(done, rows, failures, len(pending["pageids"]), articles, model)
-    os.remove(PENDING_FILE)
+    save(done, rows, failures, len(pending["pageids"]), articles, model, path)
+    os.remove(pending_file)
 
 
 if __name__ == "__main__":
