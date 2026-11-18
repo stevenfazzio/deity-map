@@ -91,6 +91,8 @@ the map, with chance in brackets:
 | | Same tradition | Same main domain (Claude) | Shared function category (Wikipedia) | Cross-cultural neighbours with the same main domain |
 |---|---|---|---|---|
 | Pantheon map | 0.88 (0.06) | 0.23 (0.07) | 0.38 (0.16) | 0.22 (0.07) |
+| Erasure only, no instruction | 0.26 | 0.37 | 0.53 | 0.32 |
+| Instruction only, no erasure | 0.67 | 0.41 | 0.59 | 0.46 |
 | Role map | 0.20 | 0.56 | 0.71 | 0.55 |
 
 The function categories are Wikipedia's *Deities by function* tree (storm gods, war
@@ -99,9 +101,16 @@ in building the map. What tradition clustering remains, 0.20, is close to the 0.
 map arranged purely by role would show, since traditions differ in their mix of roles:
 Greek myth has a great many water nymphs.
 
-Erasure alone was not enough: without the instruction, the leads have too little role
-content left once culture is gone (with a smaller embedding model the result was a
-featureless ball). A centroid projection erased tradition as completely as LEACE and
+The middle rows make one change each. Their maps aren't published, but `render.py`
+builds them into `data/ablations/` (see Reproducing). Erasure does nearly all of the
+removing of culture, taking tradition from 0.88 to 0.26 by itself. Role structure comes
+from both, and the gains roughly add up: each alone gets about half of the gain in main
+domain. Erased without the instruction, the leads have too little role content left
+once culture is gone: the map's continents are named for roles, but many regions inside
+them still follow a tradition, such as the Nereids and the Tuatha Dé Danann (with a
+smaller embedding model the result was a featureless ball). Instructed without the
+erasure, the map keeps cultural continents: Indic, Ancient Near East, East Asian folk
+deities. A centroid projection erased tradition as completely as LEACE and
 scored the same on domain; LEACE was kept because it moves the vectors about half as
 far and keeps more of the remaining structure. `experiments/erase_by_categories.py`
 found that an eraser fit on Claude's labels gives the same map as one fit on
@@ -155,6 +164,12 @@ for v in pantheon archetype; do
   uv run render.py --variant $v
   uv run social_preview.py --variant $v
 done
+for v in erasure-only instruction-only; do  # the ablations, into data/ablations/
+  uv run embed.py --variant $v
+  uv run cluster.py --variant $v --min-cluster-size 8
+  uv run render.py --variant $v
+done
+uv run python experiments/score_variants.py  # the neighbour table, for all four maps
 uv run taxonomy_audit.py  # checks the tradition list against its rule
 ```
 

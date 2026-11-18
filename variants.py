@@ -17,6 +17,16 @@ experiments/erase_by_categories.py found the two give the same map. The publishe
 map scores 0.56 on domain and 0.55 on same-domain cross-tradition neighbours, with
 tradition at 0.20.
 
+Two ablations split the archetype recipe into its halves, to see how much of the change
+from the pantheon map each one makes. They are not published: render.py writes them under
+data/ablations/, and neither published map links to them.
+
+  erasure-only      plain name + lead, tradition erased (no instruction)
+  instruction-only  the role instruction, tradition kept (no erasure)
+
+Their regions are named with the pantheon map's neutral prompt, since the archetype
+map's naming note says culture was removed, which is untrue of instruction-only.
+
 Each stage takes `--variant` and reads and writes that variant's files.
 """
 
@@ -54,6 +64,8 @@ class MapVariant:
     coarsest_name_overrides: dict = field(default_factory=dict)
     # The other map, linked from the title panel: (variant name, link text).
     other: tuple[str, str] | None = None
+    # False for the ablations: rendered under data/ablations/, without link-card tags.
+    published: bool = True
 
     @property
     def embeddings(self):
@@ -125,6 +137,38 @@ VARIANTS = {
         ),
         orientation=(1, -1),
         other=("pantheon", "See them by pantheon →"),
+    ),
+    "erasure-only": MapVariant(
+        name="erasure-only",
+        instruction=None,
+        erase_tradition=True,
+        html="erasure-only.html",
+        social_preview="",
+        title="Erasure Only",
+        subtitle="{n} divine beings: plain embeddings, tradition erased. Click one to open it.",
+        og_description="",
+        lead_colormap="domain",
+        object_description="Wikipedia articles about gods, goddesses and other divine beings",
+        corpus_description="English Wikipedia's articles on the world's deities",
+        naming_note="",
+        orientation=(-1, 1),
+        published=False,
+    ),
+    "instruction-only": MapVariant(
+        name="instruction-only",
+        instruction=ROLE_INSTRUCTION,
+        erase_tradition=False,
+        html="instruction-only.html",
+        social_preview="",
+        title="Instruction Only",
+        subtitle="{n} divine beings: role instruction, tradition kept. Click one to open it.",
+        og_description="",
+        lead_colormap="domain",
+        object_description="Wikipedia articles about gods, goddesses and other divine beings",
+        corpus_description="English Wikipedia's articles on the world's deities",
+        naming_note="",
+        orientation=(-1, 1),
+        published=False,
     ),
 }
 

@@ -8,6 +8,8 @@ embeddings, not the HTML.
     uv run render.py --variant pantheon          # docs/index.html
     uv run render.py --variant archetype         # docs/archetypes.html
     uv run social_preview.py --variant pantheon  # screenshot -> link-card image
+
+The ablations (variants.py) render under data/ablations/ instead, which isn't published.
 """
 
 import argparse
@@ -26,7 +28,7 @@ import pandas as pd
 from matplotlib.colors import to_hex, to_rgb
 
 from category_labels import colormap_traditions, decided_kinds
-from common import ROOT, write_bytes_atomic
+from common import DATA, ROOT, write_bytes_atomic
 from embed import load_corpus
 from pageviews import PAGEVIEWS_PARQUET
 from taxonomy import (
@@ -38,6 +40,7 @@ from taxonomy import (
 from variants import VARIANTS, MapVariant, variant_arg
 
 DOCS = ROOT / "docs"
+ABLATIONS = DATA / "ablations"
 PUBLIC_URL = "https://stevenfazzio.com/deity-map/"
 SNAPSHOT = "October 2026"  # when the articles were fetched (candidates.py, fetch.py)
 
@@ -298,7 +301,7 @@ def main():
     parser = argparse.ArgumentParser()
     variant_arg(parser)
     variant = VARIANTS[parser.parse_args().variant]
-    output = DOCS / variant.html
+    output = (DOCS if variant.published else ABLATIONS) / variant.html
 
     corpus = load_corpus()
     labels = pd.read_parquet(variant.labels)
@@ -465,8 +468,8 @@ def main():
         text_collision_size_scale=2.0,
     )
 
-    DOCS.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=DOCS, suffix=".html")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=output.parent, suffix=".html")
     os.close(fd)
     try:
         fig.save(tmp)
@@ -477,7 +480,7 @@ def main():
         assert anchor is not None, "no <head> in the rendered page"
         at = anchor.end()
         head = (
-            open_graph_tags(variant, len(df))
+            (open_graph_tags(variant, len(df)) if variant.published else "")
             + '\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
             + f'\n<link rel="stylesheet" href="{TITLE_FONT_CSS}">'
         )

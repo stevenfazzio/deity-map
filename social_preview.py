@@ -62,6 +62,8 @@ def main():
     args = parser.parse_args()
 
     variant = VARIANTS[args.variant]
+    if not variant.published:
+        parser.error(f"{variant.name} is an unpublished ablation: it has no link card")
     out = args.out or DOCS / variant.social_preview
     handler = functools.partial(QuietHandler, directory=str(DOCS))
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
