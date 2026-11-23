@@ -292,6 +292,16 @@ def panel_overlap(xy: np.ndarray, w: int = 1280, h: int = 800) -> dict[str, int]
     }
 
 
+# Plausible analytics: the one site that covers all of stevenfazzio.com. The script
+# ignores localhost and file:// pages, so local previews stay out of the stats.
+PLAUSIBLE_SNIPPET = """<!-- Privacy-friendly analytics by Plausible -->
+<script async src="https://plausible.io/js/pa-dvmKWiL1gpqH63wOvMp-g.js"></script>
+<script>
+  window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+  plausible.init()
+</script>"""
+
+
 def percentile(values: pd.Series) -> pd.Series:
     """0-100, ties averaged, so equal view counts get equal colours."""
     return values.rank(pct=True, method="average") * 100
@@ -480,7 +490,7 @@ def main():
         assert anchor is not None, "no <head> in the rendered page"
         at = anchor.end()
         head = (
-            (open_graph_tags(variant, len(df)) if variant.published else "")
+            (open_graph_tags(variant, len(df)) + "\n" + PLAUSIBLE_SNIPPET if variant.published else "")
             + '\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
             + f'\n<link rel="stylesheet" href="{TITLE_FONT_CSS}">'
         )
